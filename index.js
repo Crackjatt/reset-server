@@ -10,6 +10,7 @@
 import express from "express";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import fetch from "node-fetch";
 
 dotenv.config();
 
@@ -314,3 +315,4 @@ const PORT = Number(process.env.PORT || process.env.RAILWAY_PORT || 8080);
 app.listen(PORT, () => {
   console.log(`Reset server listening on port ${PORT}`);
 });
+
