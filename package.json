@@ -1,5 +1,3 @@
-path: package.json
-------------------
 {
   "name": "reset-server",
   "version": "1.0.0",
@@ -19,4 +17,3 @@ path: package.json
     "pg": "^8.11.3"
   }
 }
-------------------
