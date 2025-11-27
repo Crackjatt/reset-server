@@ -1,12 +1,8 @@
 import express from "express";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-import dns from "node:dns";
 
 dotenv.config();
-
-// 1. Force IPv4 (Bahut Zaroori for Gmail)
-dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -39,7 +35,7 @@ app.post("/send-code", async (req, res) => {
       return res.status(500).json({ error: "Server misconfigured (missing supabase keys)" });
     }
 
-    // Save code to Supabase
+    // Save to Supabase
     const supaResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/password_resets`, {
       method: "POST",
       headers: {
@@ -52,8 +48,8 @@ app.post("/send-code", async (req, res) => {
     });
 
     if (!supaResp.ok) {
-      const errText = await supaResp.text();
-      return res.status(500).json({ error: "Failed to store reset code", detail: errText });
+        const errText = await supaResp.text();
+        return res.status(500).json({ error: "Failed to store reset code", detail: errText });
     }
 
     if (!safeEnv("EMAIL_USER") || !safeEnv("EMAIL_PASS")) {
@@ -61,25 +57,25 @@ app.post("/send-code", async (req, res) => {
       return res.status(500).json({ error: "Server misconfigured (missing email creds)" });
     }
 
-    // --- GMAIL CONFIG (Anti-Timeout) ---
+    // --- FIX: USE PORT 2525 (Bypass Port 587 Block) ---
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp-relay.brevo.com",
+      port: 2525,  // <--- YEH HAI MAGIC CHANGE (587 blocked hota hai, 2525 chalta hai)
+      secure: false, 
       auth: { 
         user: safeEnv("EMAIL_USER"), 
         pass: safeEnv("EMAIL_PASS") 
       },
       tls: {
-        // Yeh line server ko bolti hai ki security certificate check mat karo
-        // Isse connection fast hota hai aur timeout ke chances kam hote hain
-        rejectUnauthorized: false 
+        rejectUnauthorized: false // Extra safety to prevent SSL hang
       }
     });
 
-    console.log("Sending email to:", email);
+    console.log("Sending email via Brevo (Port 2525) to:", email);
 
     try {
       await transporter.sendMail({
-        from: `App Support <${safeEnv("EMAIL_USER")}>`,
+        from: `ZevooChat Security <${safeEnv("EMAIL_USER")}>`,
         to: email,
         subject: "Your Password Reset Code",
         text: `Your reset code is: ${code}`
@@ -146,7 +142,6 @@ app.post("/reset-password", async (req, res) => {
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
 
-    // Verify Code
     const verifyResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/rpc/verify_reset_code`, {
       method: "POST",
       headers: {
@@ -166,7 +161,6 @@ app.post("/reset-password", async (req, res) => {
 
     if (!verifyResp.ok || !verified) return res.status(400).json({ error: "Invalid or expired code" });
 
-    // Get User
     const userResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/admin/users?email=eq.${encodeURIComponent(email)}`, {
       method: "GET",
       headers: {
@@ -183,7 +177,6 @@ app.post("/reset-password", async (req, res) => {
     if (!usersArray.length) return res.status(404).json({ error: "User not found" });
     const user = usersArray[0];
 
-    // Update Password
     const updateResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/admin/users/${user.id}`, {
       method: "PUT",
       headers: {
