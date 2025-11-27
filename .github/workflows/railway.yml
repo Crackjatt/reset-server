@@ -1,0 +1,46 @@
+name: Railway Auto Stop & Start
+
+on:
+  schedule:
+    - cron: "30 21 * * *"   # 03:00 AM IST (STOP)
+    - cron: "30 2 * * *"    # 08:00 AM IST (START)
+  workflow_dispatch: {}     # Manual run
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Decide action
+        id: action
+        run: |
+          now=$(date -u +"%H:%M")
+          echo "Current UTC: $now"
+
+          if [ "$now" = "21:30" ]; then
+            echo "action=stop" >> $GITHUB_OUTPUT
+          else
+            echo "action=start" >> $GITHUB_OUTPUT
+          fi
+
+      - name: STOP server (remove deployment)
+        if: steps.action.outputs.action == 'stop'
+        run: |
+          echo "Stopping server..."
+          query='{"query":"query($id:String!){ service(id:$id){ deployments(limit:1){ id } } }","variables":{"id":"'"${{ secrets.RAILWAY_SERVICE_ID }}"'"}}'
+          resp=$(curl -s -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" -H "Content-Type: application/json" -d "$query" https://backboard.railway.app/graphql/v2)
+          deployId=$(echo $resp | jq -r '.data.service.deployments[0].id')
+
+          echo "Removing deployment: $deployId"
+          mutation='{"query":"mutation($id:String!){ deploymentRemove(id:$id) }","variables":{"id":"'"$deployId"'"}}'
+          curl -s -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" -H "Content-Type: application/json" -d "$mutation" https://backboard.railway.app/graphql/v2
+
+      - name: START server (redeploy)
+        if: steps.action.outputs.action == 'start'
+        run: |
+          echo "Starting server..."
+          mutation='{"query":"mutation($id:String!){ serviceInstanceRedeploy(id:$id) }","variables":{"id":"'"${{ secrets.RAILWAY_SERVICE_ID }}"'"}}'
+          curl -s -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" -H "Content-Type: application/json" -d "$mutation" https://backboard.railway.app/graphql/v2
