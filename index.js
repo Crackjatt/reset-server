@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+import roomsRouter from "./routes/rooms.js"; // <-- ADDED: rooms routes
+
 const app = express();
 app.use(express.json({ limit: "100kb" }));
 
@@ -18,6 +20,9 @@ app.use((req, res, next) => {
 function safeEnv(name) {
   return process.env[name] ? process.env[name].trim() : undefined;
 }
+
+// mount rooms router (ADDED)
+app.use("/rooms", roomsRouter);
 
 // 1. Send Code Route
 app.post("/send-code", async (req, res) => {
