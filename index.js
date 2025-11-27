@@ -1,5 +1,4 @@
 import express from "express";
-import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -30,6 +29,8 @@ app.post("/send-code", async (req, res) => {
 
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
+    // API Key uthao
+    const BREVO_API_KEY = safeEnv("EMAIL_PASS"); 
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: "Server misconfigured (missing supabase keys)" });
@@ -52,41 +53,43 @@ app.post("/send-code", async (req, res) => {
         return res.status(500).json({ error: "Failed to store reset code", detail: errText });
     }
 
-    if (!safeEnv("EMAIL_USER") || !safeEnv("EMAIL_PASS")) {
-      console.error("Missing email credentials");
-      return res.status(500).json({ error: "Server misconfigured (missing email creds)" });
+    if (!BREVO_API_KEY) {
+      console.error("Missing Brevo API Key");
+      return res.status(500).json({ error: "Server misconfigured (missing email key)" });
     }
 
-    // --- FIX: USE PORT 2525 (Bypass Port 587 Block) ---
-    const transporter = nodemailer.createTransport({
-      host: "smtp-relay.brevo.com",
-      port: 2525,  // <--- YEH HAI MAGIC CHANGE (587 blocked hota hai, 2525 chalta hai)
-      secure: false, 
-      auth: { 
-        user: safeEnv("EMAIL_USER"), 
-        pass: safeEnv("EMAIL_PASS") 
+    // --- YEH HAI ASLI CHANGE: HTTP API ---
+    // Logs mein yeh line aani chahiye:
+    console.log("Sending email via Brevo HTTP API to:", email);
+
+    const emailResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "api-key": BREVO_API_KEY, // Tumhari xkeysib- wali key
+        "content-type": "application/json"
       },
-      tls: {
-        rejectUnauthorized: false // Extra safety to prevent SSL hang
-      }
+      body: JSON.stringify({
+        sender: { name: "ZevooChat Security", email: safeEnv("EMAIL_USER") },
+        to: [{ email: email }],
+        subject: "Your Password Reset Code",
+        htmlContent: `<p>Your reset code is: <strong>${code}</strong></p>`
+      })
     });
 
-    console.log("Sending email via Brevo (Port 2525) to:", email);
+    // Brevo ka response check karo
+    const emailText = await emailResponse.text();
+    let emailResult;
+    try { emailResult = JSON.parse(emailText); } catch { emailResult = emailText; }
 
-    try {
-      await transporter.sendMail({
-        from: `ZevooChat Security <${safeEnv("EMAIL_USER")}>`,
-        to: email,
-        subject: "Your Password Reset Code",
-        text: `Your reset code is: ${code}`
-      });
-      console.log("Mail sent successfully.");
-    } catch (mailErr) {
-      console.error("Mail error:", mailErr.message);
-      return res.status(500).json({ error: "Failed to send email", detail: mailErr.message });
+    if (!emailResponse.ok) {
+      console.error("Brevo API Error:", emailResult);
+      return res.status(500).json({ error: "Failed to send email via API", detail: emailResult });
     }
 
+    console.log("Mail sent successfully. Message ID:", emailResult.messageId);
     return res.json({ success: true, message: "Reset code sent!" });
+
   } catch (err) {
     console.error("Error (send-code):", err);
     return res.status(500).json({ error: "Server error", detail: err.message });
@@ -118,11 +121,9 @@ app.post("/verify-code", async (req, res) => {
     );
 
     const text = await resp.text();
-    let result;
-    try { result = JSON.parse(text); } catch { result = text; }
-
     if (!resp.ok) return res.status(500).json({ error: "RPC failed", detail: text });
 
+    let result; try { result = JSON.parse(text); } catch { result = text; }
     const valid = (result === true) || (result === "true") || (result === JSON.stringify(true));
     return res.json({ success: true, valid });
   } catch (err) {
