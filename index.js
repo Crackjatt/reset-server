@@ -1,4 +1,3 @@
-// index.js (full file) - use global fetch (no node-fetch import)
 import express from "express";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
@@ -6,8 +5,10 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
+// Bada data handle karne ke liye limit badhai
 app.use(express.json({ limit: "100kb" }));
 
+// CORS Headers (Manual setup)
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey");
@@ -16,6 +17,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// JSON Parse Error Handler
 app.use((err, req, res, next) => {
   if (err && err.type === "entity.parse.failed") {
     console.error("JSON parse error:", err.message);
@@ -28,6 +30,9 @@ function safeEnv(name) {
   return process.env[name] ? process.env[name].trim() : undefined;
 }
 
+// --- ROUTES ---
+
+// 1. Send Code
 app.post("/send-code", async (req, res) => {
   try {
     const email = (req.body && (req.body.email || req.body.user_email))?.toString();
@@ -37,11 +42,13 @@ app.post("/send-code", async (req, res) => {
 
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
+
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       console.error("Missing SUPABASE_URL or SERVICE_ROLE_KEY");
       return res.status(500).json({ error: "Server misconfigured (missing supabase keys)" });
     }
 
+    // Supabase mein code save karo
     const supaResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/password_resets`, {
       method: "POST",
       headers: {
@@ -54,13 +61,15 @@ app.post("/send-code", async (req, res) => {
     });
 
     const supaText = await supaResp.text();
-    console.log("SUPA insert status:", supaResp.status, "body:", supaText);
+    console.log("SUPA insert status:", supaResp.status);
+    
     if (!supaResp.ok) {
       return res.status(500).json({ error: "Failed to store reset code", detail: supaText });
     }
 
+    // Email bhejo
     if (!safeEnv("EMAIL_USER") || !safeEnv("EMAIL_PASS")) {
-      console.error("Missing email credentials in .env");
+      console.error("Missing email credentials");
       return res.status(500).json({ error: "Server misconfigured (missing email creds)" });
     }
 
@@ -71,32 +80,32 @@ app.post("/send-code", async (req, res) => {
 
     try {
       await transporter.verify();
-      console.log("Nodemailer connected OK (verified).");
     } catch (verifyErr) {
-      console.error("Nodemailer verify failed:", verifyErr && verifyErr.message);
-      return res.status(500).json({ error: "Email provider authentication failed", detail: verifyErr.message });
+      console.error("Nodemailer verify failed:", verifyErr.message);
+      return res.status(500).json({ error: "Email provider auth failed", detail: verifyErr.message });
     }
 
     try {
-      const mailInfo = await transporter.sendMail({
+      await transporter.sendMail({
         from: safeEnv("EMAIL_USER"),
         to: email,
         subject: "Your Reset Code",
         text: `Your reset code is: ${code}`
       });
-      console.log("Mail sent ok:", mailInfo && mailInfo.messageId);
+      console.log("Mail sent to:", email);
     } catch (mailErr) {
-      console.error("Mail error:", mailErr && mailErr.message);
+      console.error("Mail error:", mailErr.message);
       return res.status(500).json({ error: "Failed to send email", detail: mailErr.message });
     }
 
     return res.json({ success: true, message: "Reset code sent!" });
   } catch (err) {
-    console.error("Unhandled server error (send-code):", err);
+    console.error("Error (send-code):", err);
     return res.status(500).json({ error: "Server error", detail: err.message });
   }
 });
 
+// 2. Verify Code
 app.post("/verify-code", async (req, res) => {
   try {
     const email = (req.body && (req.body.email || req.body.user_email))?.toString();
@@ -106,9 +115,6 @@ app.post("/verify-code", async (req, res) => {
 
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      return res.status(500).json({ error: "Server misconfigured (missing supabase keys)" });
-    }
 
     const resp = await fetch(
       `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/rpc/verify_reset_code`,
@@ -128,18 +134,19 @@ app.post("/verify-code", async (req, res) => {
     try { result = JSON.parse(text); } catch { result = text; }
 
     if (!resp.ok) {
-      console.error("verify_reset_code RPC failed:", text);
+      console.error("Verify RPC failed:", text);
       return res.status(500).json({ error: "RPC failed", detail: text });
     }
 
     const valid = (result === true) || (result === "true") || (result === JSON.stringify(true));
     return res.json({ success: true, valid });
   } catch (err) {
-    console.error("Unhandled server error (verify-code):", err);
+    console.error("Error (verify-code):", err);
     return res.status(500).json({ error: "Server error", detail: err.message });
   }
 });
 
+// 3. Reset Password
 app.post("/reset-password", async (req, res) => {
   try {
     const email = (req.body && (req.body.email || req.body.user_email))?.toString();
@@ -147,14 +154,12 @@ app.post("/reset-password", async (req, res) => {
     const code = (req.body && (req.body.code || req.body.user_code))?.toString();
 
     if (!email || !new_password || !code)
-      return res.status(400).json({ error: "email, new_password and code are required" });
+      return res.status(400).json({ error: "email, new_password and code required" });
 
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      return res.status(500).json({ error: "Server misconfigured (missing supabase keys)" });
-    }
 
+    // Code verify karo
     const verifyResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/rpc/verify_reset_code`, {
       method: "POST",
       headers: {
@@ -170,15 +175,13 @@ app.post("/reset-password", async (req, res) => {
     try {
       const parsed = JSON.parse(verifyText);
       if (parsed === true || parsed === "true") verified = true;
-    } catch {
-      if (verifyText === "true") verified = true;
-    }
+    } catch { if (verifyText === "true") verified = true; }
 
     if (!verifyResp.ok || !verified) {
-      console.error("Code verification failed:", verifyResp.status, verifyText);
-      return res.status(400).json({ error: "Invalid or expired code", detail: verifyText });
+      return res.status(400).json({ error: "Invalid or expired code" });
     }
 
+    // User ID dhundo
     const userResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/admin/users?email=eq.${encodeURIComponent(email)}`, {
       method: "GET",
       headers: {
@@ -189,19 +192,15 @@ app.post("/reset-password", async (req, res) => {
     });
 
     const userText = await userResp.text();
-    let parsedUsers;
-    try { parsedUsers = JSON.parse(userText); } catch (e) {
-      console.error("Failed to parse admin users response:", userText);
-      return res.status(500).json({ error: "Failed to parse Supabase user response", detail: userText });
-    }
+    const parsedUsers = JSON.parse(userText);
+    const usersArray = Array.isArray(parsedUsers) ? parsedUsers : (parsedUsers.users || []);
 
-    let usersArray = Array.isArray(parsedUsers) ? parsedUsers : (parsedUsers.users || parsedUsers.data || null);
-    if (!usersArray || usersArray.length === 0) {
-      console.error("User not found in admin/users response:", parsedUsers);
-      return res.status(404).json({ error: "User not found in Supabase Auth", emailSearched: email, raw: parsedUsers });
+    if (!usersArray.length) {
+      return res.status(404).json({ error: "User not found" });
     }
     const user = usersArray[0];
 
+    // Password Update karo
     const updateResp = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/admin/users/${user.id}`, {
       method: "PUT",
       headers: {
@@ -212,20 +211,22 @@ app.post("/reset-password", async (req, res) => {
       body: JSON.stringify({ password: new_password })
     });
 
-    const updateText = await updateResp.text();
     if (!updateResp.ok) {
-      console.error("Password update failed. status:", updateResp.status, "body:", updateText);
-      return res.status(500).json({ error: "Failed to update password", status: updateResp.status, detail: updateText });
+      return res.status(500).json({ error: "Failed to update password" });
     }
 
     return res.json({ success: true, message: "Password updated!" });
   } catch (err) {
-    console.error("reset-password error:", err);
+    console.error("Error (reset-password):", err);
     return res.status(500).json({ error: "Server error", detail: err.message });
   }
 });
 
+// Health check
 app.get("/", (req, res) => res.json({ status: "ok" }));
 
+// --- IMPORTANT: LISTEN ON 0.0.0.0 ---
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
-app.listen(PORT, () => console.log(`Reset server running on port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Reset server running on port ${PORT}`);
+});
