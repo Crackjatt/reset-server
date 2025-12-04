@@ -5,7 +5,11 @@ dotenv.config();
 
 import roomsRouter from "./routes/rooms.js"; // <-- ADDED: rooms routes
 
+// NEW: cloudinary delete route import
+import cloudinaryDeleteRoute from "./cloudinary-delete-route.js";
+
 const app = express();
+// keep same limit as before (100kb) — this server doesn't accept big uploads directly
 app.use(express.json({ limit: "100kb" }));
 
 // CORS Headers
@@ -23,6 +27,10 @@ function safeEnv(name) {
 
 // mount rooms router (ADDED)
 app.use("/rooms", roomsRouter);
+
+// MOUNT CLOUDINARY DELETE ROUTE (ADDED)
+// This ensures POST /delete-image is handled by the route we added.
+app.use("/delete-image", cloudinaryDeleteRoute);
 
 // 1. Send Code Route
 app.post("/send-code", async (req, res) => {
