@@ -8,6 +8,9 @@ import roomsRouter from "./routes/rooms.js"; // <-- ADDED: rooms routes
 // NEW: cloudinary delete route import
 import cloudinaryDeleteRoute from "./cloudinary-delete-route.js";
 
+// NEW: avatar update router
+import avatarRouter from "./routes/avatar.js";
+
 const app = express();
 // keep same limit as before (100kb) — this server doesn't accept big uploads directly
 app.use(express.json({ limit: "100kb" }));
@@ -15,8 +18,8 @@ app.use(express.json({ limit: "100kb" }));
 // CORS Headers
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, x-apikey");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH,DELETE");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
@@ -31,6 +34,10 @@ app.use("/rooms", roomsRouter);
 // MOUNT CLOUDINARY DELETE ROUTE (ADDED)
 // This ensures POST /delete-image is handled by the route we added.
 app.use("/delete-image", cloudinaryDeleteRoute);
+
+// MOUNT AVATAR ROUTER (NEW)
+// Handles avatar swap: deletes old cloudinary image and updates supabase profile
+app.use("/avatar", avatarRouter);
 
 // 1. Send Code Route
 app.post("/send-code", async (req, res) => {
