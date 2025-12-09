@@ -3,16 +3,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-import roomsRouter from "./routes/rooms.js"; // <-- ADDED: rooms routes
-
-// NEW: cloudinary delete route import
-import cloudinaryDeleteRoute from "./cloudinary-delete-route.js";
-
-// NEW: avatar update router
-import avatarRouter from "./routes/avatar.js";
-
 const app = express();
-// keep same limit as before (100kb) — this server doesn't accept big uploads directly
+// keep same limit as before (100kb)
 app.use(express.json({ limit: "100kb" }));
 
 // CORS Headers
@@ -28,16 +20,7 @@ function safeEnv(name) {
   return process.env[name] ? process.env[name].trim() : undefined;
 }
 
-// mount rooms router (ADDED)
-app.use("/rooms", roomsRouter);
-
-// MOUNT CLOUDINARY DELETE ROUTE (ADDED)
-// This ensures POST /delete-image is handled by the route we added.
-app.use("/delete-image", cloudinaryDeleteRoute);
-
-// MOUNT AVATAR ROUTER (NEW)
-// Handles avatar swap: deletes old cloudinary image and updates supabase profile
-app.use("/avatar", avatarRouter);
+// --- CORE PASSWORD RESET ROUTES ---
 
 // 1. Send Code Route
 app.post("/send-code", async (req, res) => {
@@ -49,7 +32,6 @@ app.post("/send-code", async (req, res) => {
 
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
-    // API Key uthao
     const BREVO_API_KEY = safeEnv("EMAIL_PASS"); 
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -78,15 +60,13 @@ app.post("/send-code", async (req, res) => {
       return res.status(500).json({ error: "Server misconfigured (missing email key)" });
     }
 
-    // --- YEH HAI ASLI CHANGE: HTTP API ---
-    // Logs mein yeh line aani chahiye:
     console.log("Sending email via Brevo HTTP API to:", email);
 
     const emailResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "accept": "application/json",
-        "api-key": BREVO_API_KEY, // Tumhari xkeysib- wali key
+        "api-key": BREVO_API_KEY, 
         "content-type": "application/json"
       },
       body: JSON.stringify({
@@ -97,7 +77,6 @@ app.post("/send-code", async (req, res) => {
       })
     });
 
-    // Brevo ka response check karo
     const emailText = await emailResponse.text();
     let emailResult;
     try { emailResult = JSON.parse(emailText); } catch { emailResult = emailText; }
@@ -216,7 +195,7 @@ app.post("/reset-password", async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => res.json({ status: "ok" }));
+app.get("/", (req, res) => res.json({ status: "Reset Server Active" }));
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 app.listen(PORT, "0.0.0.0", () => {
