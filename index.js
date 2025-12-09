@@ -32,7 +32,7 @@ app.post("/send-code", async (req, res) => {
 
     const SUPABASE_URL = safeEnv("SUPABASE_URL");
     const SERVICE_ROLE_KEY = safeEnv("SERVICE_ROLE_KEY");
-    const BREVO_API_KEY = safeEnv("EMAIL_PASS"); 
+    const BREVO_API_KEY = safeEnv("EMAIL_PASS"); // Brevo key stored in EMAIL_PASS
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: "Server misconfigured (missing supabase keys)" });
@@ -66,7 +66,7 @@ app.post("/send-code", async (req, res) => {
       method: "POST",
       headers: {
         "accept": "application/json",
-        "api-key": BREVO_API_KEY, 
+        "api-key": BREVO_API_KEY,
         "content-type": "application/json"
       },
       body: JSON.stringify({
@@ -86,12 +86,13 @@ app.post("/send-code", async (req, res) => {
       return res.status(500).json({ error: "Failed to send email via API", detail: emailResult });
     }
 
-    console.log("Mail sent successfully. Message ID:", emailResult.messageId);
-    return res.json({ success: true, message: "Reset code sent!" });
+    console.log("Mail sent successfully. Message ID:", (emailResult && emailResult.messageId) || null);
+    // <-- FIXED: return proper JSON with status code
+    return res.status(200).json({ success: true, message: "Reset code sent" });
 
   } catch (err) {
     console.error("Error (send-code):", err);
-    return res.status(500).json({ error: "Server error", detail: err.message });
+    return res.status(500).json({ error: "Server error", detail: err.message || String(err) });
   }
 });
 
@@ -124,9 +125,10 @@ app.post("/verify-code", async (req, res) => {
 
     let result; try { result = JSON.parse(text); } catch { result = text; }
     const valid = (result === true) || (result === "true") || (result === JSON.stringify(true));
-    return res.json({ success: true, valid });
+    return res.status(200).json({ success: true, valid });
   } catch (err) {
-    return res.status(500).json({ error: "Server error", detail: err.message });
+    console.error("Error (verify-code):", err);
+    return res.status(500).json({ error: "Server error", detail: err.message || String(err) });
   }
 });
 
@@ -189,9 +191,10 @@ app.post("/reset-password", async (req, res) => {
 
     if (!updateResp.ok) return res.status(500).json({ error: "Failed to update password" });
 
-    return res.json({ success: true, message: "Password updated!" });
+    return res.status(200).json({ success: true, message: "Password updated" });
   } catch (err) {
-    return res.status(500).json({ error: "Server error", detail: err.message });
+    console.error("Error (reset-password):", err);
+    return res.status(500).json({ error: "Server error", detail: err.message || String(err) });
   }
 });
 
